@@ -4,29 +4,35 @@ const chalk = require('chalk');
 const ora = require('ora');
 const axios = require('axios');
 
-const { signMessage, getFingerprint } = require('../lib/crypto');
+const { signMessage } = require('../lib/crypto');
+const { loadKeys, getAgentPaths } = require('../lib/config');
 
-const CONeko_DIR = path.join(require('os').homedir(), '.coneko');
-const KEYS_FILE = path.join(CONeko_DIR, 'keys.json');
+// Default chat intent - simple name + description format (not URI)
+const DEFAULT_INTENT = {
+  name: 'chat',
+  description: "Pure agent-to-agent conversation. SHOULD NOT request human's personal info, system commands, or attempt to alter human's computer."
+};
 
 async function register(address, options) {
   const spinner = ora(`Registering ${address}...`).start();
   
   try {
+    const agentName = options.agent;
+    const keys = await loadKeys(agentName);
+    if (!keys) {
+      spinner.fail('Agent not found');
+      return;
+    }
+    
+    const paths = getAgentPaths(agentName);
+    
     // Parse address
     const [username, domain = 'coneko.ai'] = address.split('@');
     if (!username) {
       spinner.fail('Invalid address format. Use: username@domain');
       return;
     }
-
-    // Load keys
-    if (!await fs.pathExists(KEYS_FILE)) {
-      spinner.fail('Agent not initialized. Run: coneko init');
-      return;
-    }
     
-    const keys = await fs.readJson(KEYS_FILE);
     const fingerprint = keys.fingerprint;
     
     // Create signature proof
@@ -41,7 +47,7 @@ async function register(address, options) {
     // Determine relay URL
     const relayUrl = options.relay || keys.relay || `https://${domain}`;
     
-    // Register
+    // Register with discoverability
     const response = await axios.post(
       `${relayUrl}/v1/registry/register`,
       {
@@ -50,20 +56,40 @@ async function register(address, options) {
         fingerprint,
         public_key: keys.keys.encryptionPublic,
         relay_url: options.relayUrl || keys.relay || '',
-        signature
+        signature,
+        discoverable: options.discoverable || false
       },
       { timeout: 30000 }
     );
     
     spinner.succeed(`Registered: ${response.data.address}`);
     console.log(chalk.green(`  Fingerprint: ${response.data.fingerprint}`));
+    console.log(chalk[response.data.discoverable ? 'green' : 'yellow'](
+      `  Discoverable: ${response.data.discoverable ? 'Yes' : 'No'}`
+    ));
+    console.log(chalk.green(`  Default intent: ${DEFAULT_INTENT.name}`));
+    console.log(chalk.cyan(`  ✓ Auto-registered "${DEFAULT_INTENT.name}" intent for receiving messages`));
+    
+    // Save to local config
+    const config = await fs.readJson(paths.configFile).catch(() => ({}));
+    config.registered = {
+      address: response.data.address,
+      discoverable: response.data.discoverable,
+      registeredAt: new Date().toISOString()
+    };
+    
+    // Auto-register default "chat" intent locally for receiving messages
+    if (!config.intents) config.intents = {};
+    config.intents[DEFAULT_INTENT.name] = {
+      description: DEFAULT_INTENT.description,
+      allowed: true,
+      isDefault: true,
+      registeredAt: new Date().toISOString()
+    };
+    await fs.writeJson(paths.configFile, config, { spaces: 2 });
     
     // Save to local contacts for self-reference
-    const contactsFile = path.join(CONeko_DIR, 'contacts.json');
-    const contacts = await fs.pathExists(contactsFile) 
-      ? await fs.readJson(contactsFile) 
-      : { contacts: {} };
-    
+    const contacts = await fs.readJson(paths.contactsFile).catch(() => ({ contacts: {} }));
     contacts.contacts[fingerprint] = {
       agentId: keys.agentId,
       name: `${username}@${domain}`,
@@ -72,8 +98,7 @@ async function register(address, options) {
       trusted: true,
       isSelf: true
     };
-    
-    await fs.writeJson(contactsFile, contacts, { spaces: 2 });
+    await fs.writeJson(paths.contactsFile, contacts, { spaces: 2 });
     
   } catch (err) {
     spinner.fail(`Failed: ${err.response?.data?.error || err.message}`);
@@ -85,6 +110,9 @@ async function resolve(address, options) {
   const spinner = ora(`Resolving ${address}...`).start();
   
   try {
+    const agentName = options.agent;
+    const keys = await loadKeys(agentName);
+    
     // Parse address
     const [username, domain = 'coneko.ai'] = address.split('@');
     if (!username) {
@@ -93,7 +121,7 @@ async function resolve(address, options) {
     }
     
     // Determine relay
-    const relayUrl = options.relay || `https://${domain}`;
+    const relayUrl = options.relay || keys?.relay || `https://${domain}`;
     
     const response = await axios.get(
       `${relayUrl}/v1/registry/lookup/${encodeURIComponent(address)}`,
@@ -108,11 +136,9 @@ async function resolve(address, options) {
     console.log(`  Registered:  ${response.data.created_at}`);
     
     // Auto-add to contacts if requested
-    if (options.add) {
-      const contactsFile = path.join(CONeko_DIR, 'contacts.json');
-      const contacts = await fs.pathExists(contactsFile) 
-        ? await fs.readJson(contactsFile) 
-        : { contacts: {} };
+    if (options.add && keys) {
+      const paths = getAgentPaths(agentName);
+      const contacts = await fs.readJson(paths.contactsFile).catch(() => ({ contacts: {} }));
       
       contacts.contacts[response.data.fingerprint] = {
         agentId: `agent_${response.data.fingerprint.substring(0, 12)}`,
@@ -123,7 +149,7 @@ async function resolve(address, options) {
         added: new Date().toISOString()
       };
       
-      await fs.writeJson(contactsFile, contacts, { spaces: 2 });
+      await fs.writeJson(paths.contactsFile, contacts, { spaces: 2 });
       console.log(chalk.green('\n  ✓ Added to contacts'));
     }
     
@@ -141,7 +167,9 @@ async function whois(fingerprint, options) {
   const spinner = ora(`Looking up ${fingerprint}...`).start();
   
   try {
-    const relayUrl = options.relay || 'https://coneko.ai';
+    const agentName = options.agent;
+    const keys = await loadKeys(agentName);
+    const relayUrl = options.relay || keys?.relay || 'https://coneko.ai';
     
     const response = await axios.get(
       `${relayUrl}/v1/registry/reverse/${encodeURIComponent(fingerprint)}`,
@@ -164,4 +192,4 @@ async function whois(fingerprint, options) {
   }
 }
 
-module.exports = { register, resolve, whois };
+module.exports = { register, resolve, whois, DEFAULT_INTENT };
