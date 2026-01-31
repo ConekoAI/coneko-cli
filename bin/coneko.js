@@ -211,6 +211,7 @@ program
   .option('-a, --agent <name>', 'Agent name')
   .option('--no-ack', 'Do not auto-acknowledge messages')
   .option('-l, --limit <n>', 'Maximum messages to fetch', '10')
+  .option('-d, --decrypt', 'Decrypt messages immediately for easier human audit', false)
   .action(mail.check);
 
 // Gateway setup
