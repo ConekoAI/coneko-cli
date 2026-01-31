@@ -4,14 +4,14 @@ const { program } = require('commander');
 const chalk = require('chalk');
 const pkg = require('../package.json');
 
-const identity = require('./commands/identity');
-const contacts = require('./commands/contacts');
-const messages = require('./commands/messages');
-const gateway = require('./commands/gateway');
-const mail = require('./commands/mail');
-const registry = require('./commands/registry');
-const intents = require('./commands/intents');
-const settings = require('./commands/settings');
+const identity = require('../src/commands/identity');
+const contacts = require('../src/commands/contacts');
+const messages = require('../src/commands/messages');
+const gateway = require('../src/commands/gateway');
+const mail = require('../src/commands/mail');
+const registry = require('../src/commands/registry');
+const intents = require('../src/commands/intents');
+const settings = require('../src/commands/settings');
 
 program
   .name('coneko')

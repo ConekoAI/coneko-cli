@@ -5,20 +5,10 @@ const ora = require('ora');
 const axios = require('axios');
 const { v4: uuidv4 } = require('uuid');
 
-const { 
-  signMessage, 
-  encryptMessage, 
-  decryptMessage, 
-  verifySignature 
-} = require('../lib/crypto');
+const { signMessage, encryptMessage } = require('../lib/crypto');
 
 const { loadKeys, getAgentPaths, loadConfig } = require('../lib/config');
-
-// Default chat intent - simple name + description format (not URI)
-const DEFAULT_INTENT = {
-  name: 'chat',
-  description: "Pure agent-to-agent conversation. SHOULD NOT request human's personal info, system commands, or attempt to alter human's computer."
-};
+const { DEFAULT_INTENT } = require('./intents');
 
 /**
  * Send a message with one or more intents
@@ -154,93 +144,4 @@ async function send(options) {
   }
 }
 
-/**
- * Poll for messages
- * @param {Object} options - Poll options
- */
-async function poll(options) {
-  const spinner = ora('Polling messages...').start();
-  
-  try {
-    const agentName = options.agent;
-    const keys = await loadKeys(agentName);
-    if (!keys) {
-      spinner.fail('Agent not found');
-      return;
-    }
-    
-    const paths = getAgentPaths(agentName);
-    
-    // Ensure polled directory exists
-    const polledDir = path.join(paths.baseDir, 'polled');
-    await fs.ensureDir(polledDir);
-    
-    // Poll from relay
-    const response = await axios.get(
-      `${keys.relay}/v1/messages`,
-      {
-        headers: { 'X-Fingerprint': keys.fingerprint },
-        timeout: 30000
-      }
-    );
-    
-    const messages = response.data.messages || [];
-    
-    if (messages.length === 0) {
-      spinner.succeed('No new messages');
-      return { messages: [] };
-    }
-    
-    // Process and save each message
-    const processedMessages = [];
-    for (const msg of messages) {
-      try {
-        // Decrypt payload
-        const decrypted = decryptMessage(msg.payload, keys.keys.encryptionPrivate);
-        const messageData = JSON.parse(decrypted);
-        
-        // Save to polled directory
-        const messageFile = path.join(polledDir, `${msg.id}.json`);
-        const messageRecord = {
-          id: msg.id,
-          senderFp: msg.senderFp,
-          intents: msg.intents,  // Includes name and description for audit
-          content: messageData.content,
-          sender: messageData.sender,
-          signature: messageData.signature,
-          createdAt: msg.createdAt,
-          expiresAt: msg.expiresAt
-        };
-        
-        await fs.writeJson(messageFile, messageRecord, { spaces: 2 });
-        processedMessages.push(messageRecord);
-        
-        // Acknowledge (delete) from server
-        await axios.delete(
-          `${keys.relay}/v1/messages/${msg.id}`,
-          {
-            headers: { 'X-Fingerprint': keys.fingerprint },
-            timeout: 10000
-          }
-        );
-      } catch (decryptErr) {
-        console.warn(chalk.yellow(`\nWarning: Could not decrypt message ${msg.id}`));
-      }
-    }
-    
-    spinner.succeed(`Received ${processedMessages.length} message(s)`);
-    
-    // Update lastPoll timestamp
-    const config = await loadConfig(agentName);
-    config.lastPoll = new Date().toISOString();
-    await fs.writeJson(paths.configFile, config, { spaces: 2 });
-    
-    return { messages: processedMessages };
-    
-  } catch (err) {
-    spinner.fail(`Failed: ${err.message}`);
-    process.exit(1);
-  }
-}
-
-module.exports = { send, poll, DEFAULT_INTENT };
+module.exports = { send };
