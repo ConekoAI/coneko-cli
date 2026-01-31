@@ -11,6 +11,7 @@ const gateway = require('../src/commands/gateway');
 const mail = require('../src/commands/mail');
 const registry = require('../src/commands/registry');
 const intents = require('../src/commands/intents');
+const permissions = require('../src/commands/permissions');
 const settings = require('../src/commands/settings');
 
 program
@@ -54,11 +55,10 @@ program
 
 // Intent commands (decentralized permissions)
 program
-  .command('intent-register <uri> <description>')
+  .command('intent-register <name> <description>')
   .description('Register an intent that other agents can use when messaging you')
   .option('-a, --agent <name>', 'Agent name')
-  .option('--risk <level>', 'Risk level (low/medium/high)', 'medium')
-  .option('--auto-approve', 'Auto-approve messages with this intent', false)
+  .option('--privileged', 'Make this intent privileged (requires explicit permission)', false)
   .action(intents.registerIntent);
 
 program
@@ -68,7 +68,7 @@ program
   .action(intents.listIntents);
 
 program
-  .command('intent-remove <uri>')
+  .command('intent-remove <name>')
   .description('Remove a registered intent')
   .option('-a, --agent <name>', 'Agent name')
   .action(intents.removeIntent);
@@ -78,6 +78,33 @@ program
   .description('Query what intents a contact allows')
   .option('-a, --agent <name>', 'Agent name')
   .action(intents.queryIntents);
+
+// Permission commands (NEW - replacing friend requests)
+program
+  .command('permit <grantee>')
+  .description('Grant permission to a user for a privileged intent')
+  .requiredOption('-i, --intent <name>', 'Intent to grant permission for')
+  .option('-a, --agent <name>', 'Agent name')
+  .action(permissions.grantPermission);
+
+program
+  .command('revoke <grantee>')
+  .description('Revoke permission from a user')
+  .requiredOption('-i, --intent <name>', 'Intent to revoke permission for')
+  .option('-a, --agent <name>', 'Agent name')
+  .action(permissions.revokePermission);
+
+program
+  .command('permissions')
+  .description('List permissions you have granted')
+  .option('-a, --agent <name>', 'Agent name')
+  .action(permissions.listGrantedPermissions);
+
+program
+  .command('permissions-received')
+  .description('List permissions you have received (what privileged intents you can use)')
+  .option('-a, --agent <name>', 'Agent name')
+  .action(permissions.listReceivedPermissions);
 
 // Discoverability commands
 program
@@ -105,7 +132,6 @@ program
   .option('-l, --limit <n>', 'Max results', '20')
   .action(settings.searchAccounts);
 
-// Metrics
 // Registry commands (DNS-style addressing)
 program
   .command('register <address>')
@@ -129,7 +155,7 @@ program
   .option('-r, --relay <url>', 'Relay URL override')
   .action(registry.whois);
 
-// Contact / Friend commands
+// Contact commands (simplified - just metadata)
 program
   .command('search <query>')
   .description('Search for an account by username@domain or fingerprint')
@@ -137,71 +163,42 @@ program
   .action(contacts.search);
 
 program
-  .command('friend-request <address>')
-  .description('Send a friend request to an account')
-  .option('-a, --agent <name>', 'Agent name')
-  .option('-m, --message <text>', 'Personal message with request')
-  .action(contacts.requestFriend);
-
-program
-  .command('invitations')
-  .description('List friend invitations (received and sent)')
-  .option('-a, --agent <name>', 'Agent name')
-  .action(contacts.invitations);
-
-program
-  .command('friend-accept <fingerprint>')
-  .description('Accept a friend request')
-  .option('-a, --agent <name>', 'Agent name')
-  .option('-n, --name <name>', 'Contact name')
-  .action(contacts.acceptFriend);
-
-program
-  .command('friend-reject <fingerprint>')
-  .description('Reject a friend request')
-  .option('-a, --agent <name>', 'Agent name')
-  .action(contacts.rejectFriend);
-
-program
   .command('contacts')
-  .description('List all contacts')
+  .description('List all contacts (metadata only)')
   .option('-a, --agent <name>', 'Agent name')
   .action(contacts.list);
 
 program
-  .command('contact-remove <fingerprint>')
+  .command('contact-add <address>')
+  .description('Add a contact with optional name/notes (metadata only)')
+  .option('-a, --agent <name>', 'Agent name')
+  .option('-n, --name <displayName>', 'Display name for contact')
+  .option('--notes <text>', 'Notes about contact')
+  .action(contacts.add);
+
+program
+  .command('contact-remove <address>')
   .description('Remove a contact')
   .option('-a, --agent <name>', 'Agent name')
   .action(contacts.remove);
-
-program
-  .command('block <fingerprint>')
-  .description('Block a contact or fingerprint')
-  .option('-a, --agent <name>', 'Agent name')
-  .option('-n, --name <name>', 'Name for blocked contact')
-  .action(contacts.block);
 
 // Message commands
 program
   .command('send')
   .description('Send a message to a contact (intents checked against recipient allowlist)')
-  .requiredOption('-t, --to <address>', 'Recipient (fingerprint or username@domain)')
+  .requiredOption('-t, --to <address>', 'Recipient (username@domain)')
   .requiredOption('-i, --intent <uris>', 'Intent URI(s), comma-separated for multiple')
   .requiredOption('-c, --content <json>', 'Message content (JSON)')
   .option('-a, --agent <name>', 'Agent name')
   .option('-m, --message <text>', 'Human-readable message')
   .action(async (options) => {
-    // If to looks like an address (has @), resolve it first
-    if (options.to.includes('@')) {
-      console.log(chalk.gray(`Resolving ${options.to}...`));
-      await registry.resolve(options.to, { add: false });
-    }
     const result = await messages.send(options);
     
     // Handle bounced messages
     if (result?.bounced) {
-      console.log(chalk.yellow('\n💡 To send this message, request intent approval:'));
-      console.log(chalk.gray('   Ask your human to contact the recipient\'s human.'));
+      console.log(chalk.yellow('\n💡 To send this message:'));
+      console.log(chalk.gray('   - If intent is privileged: ask recipient to grant permission'));
+      console.log(chalk.gray('   - If intent not registered: ask recipient to register it'));
     }
   });
 
@@ -230,14 +227,10 @@ program
   .option('-a, --agent <name>', 'Agent name')
   .option('-m, --message <text>', 'Human-readable message')
   .action(async (address, options) => {
-    // Resolve address
-    const resolved = await registry.resolve(address, { add: true });
-    if (resolved) {
-      options.to = resolved.fingerprint;
-      const result = await messages.send(options);
-      if (result?.bounced) {
-        console.log(chalk.yellow('\n💡 Request intent approval from recipient'));
-      }
+    options.to = address;
+    const result = await messages.send(options);
+    if (result?.bounced) {
+      console.log(chalk.yellow('\n💡 Request intent permission from recipient'));
     }
   });
 

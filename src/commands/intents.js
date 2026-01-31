@@ -2,12 +2,13 @@ const fs = require('fs-extra');
 const path = require('path');
 const chalk = require('chalk');
 const ora = require('ora');
+const axios = require('axios');
 const { loadKeys, getAgentPaths, loadConfig, saveConfig } = require('../lib/config');
 
-// Default allowed intent (only 'chat')
+// Default allowed intent (only 'chat', always open)
 const DEFAULT_INTENT = {
   name: 'chat',
-  description: "chat with an agent - SHOULD: Pure agent-to-agent conversation - SHOULD NOT: Request human's personal info, request system commands, attempt to alter human's computer"
+  description: "Pure agent-to-agent conversation. SHOULD NOT: Request human's personal info, system commands, or attempt to alter human's computer."
 };
 
 /**
@@ -27,17 +28,32 @@ async function registerIntent(name, description, options) {
       return;
     }
     
-    const config = await loadConfig(agentName);
-    if (!config.intents) config.intents = {};
-    
     // Validate intent name format
     if (!name.match(/^[a-zA-Z0-9_-]+$/)) {
       spinner.fail('Invalid intent name format. Use alphanumeric with hyphens/underscores');
       return;
     }
     
+    const username = keys.name?.toLowerCase().replace(/\s+/g, '-');
+    const privileged = options.privileged || false;
+    
+    // Register with server
+    await axios.post(
+      `${keys.relay}/v1/intents/register`,
+      { name, description, privileged },
+      {
+        headers: { 'X-Username': username },
+        timeout: 30000
+      }
+    );
+    
+    // Also save locally for reference
+    const config = await loadConfig(agentName);
+    if (!config.intents) config.intents = {};
+    
     config.intents[name] = {
-      description: description || options.description,
+      description: description,
+      privileged: privileged,
       registeredAt: new Date().toISOString()
     };
     
@@ -45,10 +61,19 @@ async function registerIntent(name, description, options) {
     
     spinner.succeed(`Intent registered: ${name}`);
     console.log(chalk.gray(`  Description: ${description}`));
-    console.log(chalk.yellow('\n⚠️  Other agents must allow this intent to receive messages with it'));
+    console.log(chalk.gray(`  Access: ${privileged ? 'Privileged (permission required)' : 'Open (anyone can send)'}`));
+    
+    if (privileged) {
+      console.log(chalk.yellow(`\n⚠️  This is a privileged intent.`));
+      console.log(chalk.gray(`   Use 'coneko permit <user> --intent ${name}' to grant access`));
+    }
     
   } catch (err) {
-    spinner.fail(`Failed: ${err.message}`);
+    if (err.response?.data?.error) {
+      spinner.fail(`Failed: ${err.response.data.error}`);
+    } else {
+      spinner.fail(`Failed: ${err.message}`);
+    }
     process.exit(1);
   }
 }
@@ -66,30 +91,37 @@ async function listIntents(options) {
       return;
     }
     
-    const config = await loadConfig(agentName);
-    const intents = config.intents || {};
+    const username = keys.name?.toLowerCase().replace(/\s+/g, '-');
+    
+    // Fetch from server
+    const response = await axios.get(
+      `${keys.relay}/v1/intents/${username}`,
+      { timeout: 10000 }
+    );
+    
+    const intents = response.data.intents || {};
     
     console.log(chalk.bold(`\n🐱 Registered Intents for ${keys.name}:`));
     console.log(chalk.gray('(These are intents OTHER agents can use when messaging you)\n'));
     
-    // Show default
-    console.log(chalk.cyan('Default Allowed:'));
-    console.log(`  • ${chalk.green(DEFAULT_INTENT.name)}`);
-    console.log(`    ${DEFAULT_INTENT.description}`);
-    
-    // Show custom
-    const customIntents = Object.entries(intents).filter(([name]) => name !== DEFAULT_INTENT.name);
-    if (customIntents.length > 0) {
-      console.log(chalk.cyan('\nCustom Registered:'));
-      for (const [name, info] of customIntents) {
-        console.log(`  • ${chalk.green(name)}`);
+    // Show all intents
+    const entries = Object.entries(intents);
+    if (entries.length === 0) {
+      console.log(chalk.gray('No intents registered'));
+    } else {
+      for (const [name, info] of entries) {
+        const access = info.privileged 
+          ? chalk.yellow('privileged') 
+          : chalk.green('open');
+        console.log(`  • ${chalk.cyan(name)} [${access}]`);
         console.log(`    ${info.description}`);
       }
-    } else {
-      console.log(chalk.gray('\nNo custom intents registered'));
     }
     
     console.log();
+    console.log(chalk.gray('Legend:'));
+    console.log(chalk.gray(`  ${chalk.green('open')} - Anyone can send messages with this intent`));
+    console.log(chalk.gray(`  ${chalk.yellow('privileged')} - Only permitted senders can use this intent\n`));
     
   } catch (err) {
     console.error(chalk.red(`Error: ${err.message}`));
@@ -113,11 +145,7 @@ async function removeIntent(name, options) {
       return;
     }
     
-    const config = await loadConfig(agentName);
-    if (!config.intents || !config.intents[name]) {
-      spinner.fail('Intent not found');
-      return;
-    }
+    const username = keys.name?.toLowerCase().replace(/\s+/g, '-');
     
     // Can't remove default intent
     if (name === DEFAULT_INTENT.name) {
@@ -125,27 +153,43 @@ async function removeIntent(name, options) {
       return;
     }
     
-    delete config.intents[name];
-    await saveConfig(agentName, config);
+    // Remove from server
+    await axios.delete(
+      `${keys.relay}/v1/intents/${name}`,
+      {
+        headers: { 'X-Username': username },
+        timeout: 30000
+      }
+    );
+    
+    // Remove from local config
+    const config = await loadConfig(agentName);
+    if (config.intents) {
+      delete config.intents[name];
+      await saveConfig(agentName, config);
+    }
     
     spinner.succeed(`Intent removed: ${name}`);
     
   } catch (err) {
-    spinner.fail(`Failed: ${err.message}`);
+    if (err.response?.data?.error) {
+      spinner.fail(`Failed: ${err.response.data.error}`);
+    } else {
+      spinner.fail(`Failed: ${err.message}`);
+    }
     process.exit(1);
   }
 }
 
 /**
  * Query allowed intents of a contact
- * @param {string} address - Contact address (fingerprint or username@domain)
+ * @param {string} address - Contact address (username@domain)
  * @param {Object} options - Options
  */
 async function queryIntents(address, options) {
   const spinner = ora(`Querying intents for ${address}...`).start();
   
   try {
-    const axios = require('axios');
     const agentName = options.agent;
     const keys = await loadKeys(agentName);
     if (!keys) {
@@ -153,21 +197,11 @@ async function queryIntents(address, options) {
       return;
     }
     
-    // Resolve if needed
-    let fingerprint = address;
-    if (address.includes('@')) {
-      const { resolveAddress } = require('../lib/registry');
-      const resolved = await resolveAddress(address, { relay: keys.relay });
-      if (!resolved) {
-        spinner.fail(`Could not resolve ${address}`);
-        return;
-      }
-      fingerprint = resolved.fingerprint;
-    }
-    
     // Query relay for allowed intents
+    const username = address.includes('@') ? address.split('@')[0] : address;
+    
     const response = await axios.get(
-      `${keys.relay}/v1/intents/${fingerprint}`,
+      `${keys.relay}/v1/intents/${username}`,
       { timeout: 10000 }
     );
     
@@ -177,28 +211,27 @@ async function queryIntents(address, options) {
     
     console.log(chalk.bold(`\nAllowed Intents:`));
     
-    // Show default
-    console.log(chalk.cyan('Default Allowed:'));
-    console.log(`  • ${chalk.green(DEFAULT_INTENT.name)}`);
-    console.log(`    ${DEFAULT_INTENT.description}`);
-    
-    // Show custom
-    const customIntents = Object.entries(intents).filter(([name]) => name !== DEFAULT_INTENT.name);
-    if (customIntents.length > 0) {
-      console.log(chalk.cyan('\nCustom Allowed:'));
-      for (const [name, info] of customIntents) {
-        console.log(`  • ${chalk.green(name)}`);
-        console.log(`    ${info.description}`);
-      }
+    const entries = Object.entries(intents);
+    if (entries.length === 0) {
+      console.log(chalk.gray('No intents found'));
     } else {
-      console.log(chalk.gray('\nNo custom intents allowed yet'));
+      for (const [name, info] of entries) {
+        const access = info.privileged 
+          ? chalk.yellow('privileged ⚠️') 
+          : chalk.green('open');
+        console.log(chalk.cyan(`\n  ${name} [${access}]`));
+        console.log(`    ${info.description}`);
+        if (info.privileged) {
+          console.log(chalk.gray(`    You need permission to use this intent`));
+        }
+      }
     }
     
     console.log();
     
   } catch (err) {
     if (err.response?.status === 404) {
-      spinner.fail('Contact not found or intents not public');
+      spinner.fail('User not found');
     } else {
       spinner.fail(`Failed: ${err.message}`);
     }
