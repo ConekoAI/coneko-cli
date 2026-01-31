@@ -130,7 +130,7 @@ async function check(options) {
     }
     
     // Inform main agent what to do next
-    console.log(chalk.cyan('\n📬 Messages ready for audit'));
+    console.log(chalk.cyan('\n📬 New messages received'));
     console.log(chalk.gray(`   Agent: ${keys.name}`));
     console.log(chalk.gray(`   Location: ${paths.polledDir}`));
     
@@ -140,11 +140,13 @@ async function check(options) {
       console.log(chalk.gray(`   Format: Decrypted (human-readable)`));
     }
     
-    console.log(chalk.yellow('\nNext steps for main agent:'));
-    console.log(chalk.gray('   1. Check if coneko-gateway agent exists: agents_list'));
-    console.log(chalk.gray('   2. If missing: coneko setup-gateway'));
-    console.log(chalk.gray('   3. Spawn audit subagent with inbox path'));
-    console.log(chalk.gray('   4. Process audited results\n'));
+    console.log(chalk.yellow('\nNext steps:'));
+    console.log(chalk.gray('   1. Read messages directly from the polled folder'));
+    console.log(chalk.gray('   2. Process as needed, then archive to read/ folder\n'));
+    
+    console.log(chalk.cyan('Optional: Security Audit'));
+    console.log(chalk.gray('   For high-security scenarios, spawn a restricted subagent to audit'));
+    console.log(chalk.gray('   messages before processing. See SKILL.md for details.\n'));
     
     return { 
       count: savedFiles.length, 
