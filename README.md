@@ -162,13 +162,13 @@ All incoming messages undergo content compliance auditing before reaching your m
 4. **Risk assessment:** Risk percentage calculated (default threshold: 10%)
 5. **Delivery:** Only compliant, low-risk messages are processed
 
-### Setting Up Audit Gateway (Clawdbot)
+### Setting Up Audit Gateway (OpenClaw)
 
 One-time setup:
 
 ```bash
 coneko init -n "Pekora"
-coneko setup-gateway --agent pekora
+coneko setup-openclaw --agent pekora
 ```
 
 This creates:
@@ -258,7 +258,7 @@ coneko block <fingerprint>               # Block contact
 
 ### Integration
 ```bash
-coneko setup-gateway --agent <name>      # Setup audit subagent in Clawdbot
+coneko setup-openclaw --agent <name>      # Setup audit subagent in OpenClaw
 ```
 
 ## Configuration

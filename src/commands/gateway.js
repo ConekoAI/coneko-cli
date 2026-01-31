@@ -4,21 +4,21 @@ const chalk = require('chalk');
 const ora = require('ora');
 const { getAgentPaths, loadKeys } = require('../lib/config');
 
-const CLAWDBOT_DIR = path.join(require('os').homedir(), '.clawdbot');
-const CLAWDBOT_CONFIG = path.join(CLAWDBOT_DIR, 'clawdbot.json');
+const OPENCLAW_DIR = path.join(require('os').homedir(), '.openclaw');
+const OPENCLAW_CONFIG = path.join(OPENCLAW_DIR, 'openclaw.json');
 
 /**
- * Setup coneko-gateway agent in Clawdbot configuration
+ * Setup coneko-gateway agent in OpenClaw configuration
  * Creates an isolated subagent with limited tools for message auditing
  */
 async function setup(options) {
   const spinner = ora('Setting up coneko-gateway agent...').start();
   
   try {
-    // Check if clawdbot is installed
-    if (!await fs.pathExists(CLAWDBOT_CONFIG)) {
-      spinner.fail('Clawdbot not found. Please install Clawdbot first.');
-      console.log(chalk.yellow('\nInstall: https://docs.clawd.bot/install'));
+    // Check if openclaw is installed
+    if (!await fs.pathExists(OPENCLAW_CONFIG)) {
+      spinner.fail('OpenClaw not found. Please install OpenClaw first.');
+      console.log(chalk.yellow('\nInstall: https://docs.openclaw.ai/install'));
       return;
     }
     
@@ -28,11 +28,11 @@ async function setup(options) {
     const keys = agentName ? await loadKeys(agentName) : null;
     
     // Read current config
-    const config = await fs.readJson(CLAWDBOT_CONFIG);
+    const config = await fs.readJson(OPENCLAW_CONFIG);
     
     // Backup existing config
-    const backupPath = `${CLAWDBOT_CONFIG}.backup.${Date.now()}`;
-    await fs.copy(CLAWDBOT_CONFIG, backupPath);
+    const backupPath = `${OPENCLAW_CONFIG}.backup.${Date.now()}`;
+    await fs.copy(OPENCLAW_CONFIG, backupPath);
     spinner.info(`Config backed up to: ${backupPath}`);
     
     // Ensure agents.list exists
@@ -76,7 +76,7 @@ async function setup(options) {
     }
     
     // Write updated config
-    await fs.writeJson(CLAWDBOT_CONFIG, config, { spaces: 2 });
+    await fs.writeJson(OPENCLAW_CONFIG, config, { spaces: 2 });
     
     // Create workspace
     await fs.ensureDir(gatewayWorkspace);
@@ -218,7 +218,7 @@ ${gatewayWorkspace}
 
 ## Parent Agent
 
-This subagent serves the main Clawdbot agent for coneko message auditing.
+This subagent serves the main OpenClaw agent for coneko message auditing.
 
 ## Boundaries
 
@@ -253,7 +253,7 @@ To audit messages, spawn this subagent with the specific agent's polled/ path.
       console.log(chalk.gray(`   Location: ${agentPaths.agentDir}`));
     }
     
-    console.log(chalk.yellow('\n⚠️  Restart Clawdbot to apply changes'));
+    console.log(chalk.yellow('\n⚠️  Restart OpenClaw to apply changes'));
     console.log(chalk.gray('   Then use: coneko poll --agent <name>'));
     console.log(chalk.gray('   And spawn subagent with audit task\n'));
     

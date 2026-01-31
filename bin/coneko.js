@@ -215,8 +215,8 @@ program
 
 // Gateway setup
 program
-  .command('setup-gateway')
-  .description('Setup coneko-gateway agent in Clawdbot')
+  .command('setup-openclaw')
+  .description('Setup coneko-gateway agent in OpenClaw')
   .option('-a, --agent <name>', 'Link to specific coneko agent')
   .action(gateway.setup);
 
