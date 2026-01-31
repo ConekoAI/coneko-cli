@@ -1,0 +1,26 @@
+# Don't publish tests and dev files
+test/
+*.test.js
+jest.config.js
+
+# Don't publish local config
+.env
+.env.local
+
+# Don't publish git
+.git/
+.gitignore
+
+# Don't publish IDE stuff
+.vscode/
+.idea/
+*.swp
+
+# Don't publish OS files
+.DS_Store
+Thumbs.db
+
+# Don't publish npm debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
