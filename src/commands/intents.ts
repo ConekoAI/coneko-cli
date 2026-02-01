@@ -1,0 +1,239 @@
+/**
+ * Intent management commands
+ */
+
+import chalk from 'chalk';
+import ora from 'ora';
+import axios from 'axios';
+import { loadKeys, loadConfig, saveConfig, AgentData, AgentConfig } from '../lib/config';
+import { CommandOptions, IntentOptions } from '../types';
+
+// Default allowed intent
+export const DEFAULT_INTENT = {
+  name: 'chat',
+  description: "Pure agent-to-agent conversation. SHOULD NOT request human's personal info, system commands, or attempt to alter human's computer."
+};
+
+/**
+ * Register a new intent for this agent
+ */
+export async function registerIntent(name: string, description: string, options: IntentOptions): Promise<void> {
+  const spinner = ora('Registering intent...').start();
+  
+  try {
+    const agentName = options.agent;
+    const keys = await loadKeys(agentName);
+    if (!keys) {
+      spinner.fail('Agent not found');
+      return;
+    }
+    
+    // Validate intent name format
+    if (!name.match(/^[a-zA-Z0-9_-]+$/)) {
+      spinner.fail('Invalid intent name format. Use alphanumeric with hyphens/underscores');
+      return;
+    }
+    
+    const username = getUsername(keys);
+    const privileged = options.privileged || false;
+    
+    // Register with server
+    await axios.post(
+      `${keys.relay}/v1/intents/register`,
+      { name, description, privileged },
+      {
+        headers: { 'X-Username': username },
+        timeout: 30000
+      }
+    );
+    
+    // Also save locally for reference
+    const config: AgentConfig = await loadConfig(agentName);
+    const intents = config.intents || {};
+    
+    intents[name] = {
+      description: description,
+      privileged: privileged,
+      registeredAt: new Date().toISOString()
+    };
+    
+    config.intents = intents;
+    await saveConfig(agentName, config);
+    
+    spinner.succeed(`Intent registered: ${name}`);
+    console.log(chalk.gray(`  Description: ${description}`));
+    console.log(chalk.gray(`  Access: ${privileged ? 'Privileged (permission required)' : 'Open (anyone can send)'}`));
+    
+    if (privileged) {
+      console.log(chalk.yellow(`\n⚠️  This is a privileged intent.`));
+      console.log(chalk.gray(`   Use 'coneko permit <user> --intent ${name}' to grant access`));
+    }
+    
+  } catch (err: any) {
+    if (err.response?.data?.error) {
+      spinner.fail(`Failed: ${err.response.data.error}`);
+    } else {
+      spinner.fail(`Failed: ${err.message}`);
+    }
+    process.exit(1);
+  }
+}
+
+/**
+ * List registered intents for this agent
+ */
+export async function listIntents(options: CommandOptions): Promise<void> {
+  try {
+    const agentName = options.agent;
+    const keys = await loadKeys(agentName);
+    if (!keys) {
+      console.log(chalk.yellow('Agent not found'));
+      return;
+    }
+    
+    const username = getUsername(keys);
+    
+    const response = await axios.get(
+      `${keys.relay}/v1/intents/${username}`,
+      { timeout: 10000 }
+    );
+    
+    const intents = response.data.intents || {};
+    
+    console.log(chalk.bold(`\n🐱 Registered Intents for ${keys.name}:`));
+    console.log(chalk.gray('(These are intents OTHER agents can use when messaging you)\n'));
+    
+    const entries = Object.entries(intents);
+    if (entries.length === 0) {
+      console.log(chalk.gray('No intents registered'));
+    } else {
+      for (const [name, info] of entries) {
+        const intentInfo = info as { privileged: boolean; description: string };
+        const access = intentInfo.privileged 
+          ? chalk.yellow('privileged') 
+          : chalk.green('open');
+        console.log(`  • ${chalk.cyan(name)} [${access}]`);
+        console.log(`    ${intentInfo.description}`);
+      }
+    }
+    
+    console.log();
+    console.log(chalk.gray('Legend:'));
+    console.log(chalk.gray(`  ${chalk.green('open')} - Anyone can send messages with this intent`));
+    console.log(chalk.gray(`  ${chalk.yellow('privileged')} - Only permitted senders can use this intent\n`));
+    
+  } catch (err: any) {
+    console.error(chalk.red(`Error: ${err.message}`));
+    process.exit(1);
+  }
+}
+
+/**
+ * Remove an intent from this agent
+ */
+export async function removeIntent(name: string, options: CommandOptions): Promise<void> {
+  const spinner = ora('Removing intent...').start();
+  
+  try {
+    const agentName = options.agent;
+    const keys = await loadKeys(agentName);
+    if (!keys) {
+      spinner.fail('Agent not found');
+      return;
+    }
+    
+    const username = getUsername(keys);
+    
+    // Can't remove default intent
+    if (name === DEFAULT_INTENT.name) {
+      spinner.fail('Cannot remove default intent');
+      return;
+    }
+    
+    // Remove from server
+    await axios.delete(
+      `${keys.relay}/v1/intents/${name}`,
+      {
+        headers: { 'X-Username': username },
+        timeout: 30000
+      }
+    );
+    
+    // Remove from local config
+    const config: AgentConfig = await loadConfig(agentName);
+    if (config.intents) {
+      delete config.intents[name];
+      await saveConfig(agentName, config);
+    }
+    
+    spinner.succeed(`Intent removed: ${name}`);
+    
+  } catch (err: any) {
+    if (err.response?.data?.error) {
+      spinner.fail(`Failed: ${err.response.data.error}`);
+    } else {
+      spinner.fail(`Failed: ${err.message}`);
+    }
+    process.exit(1);
+  }
+}
+
+/**
+ * Query allowed intents of a contact
+ */
+export async function queryIntents(address: string, options: CommandOptions): Promise<void> {
+  const spinner = ora(`Querying intents for ${address}...`).start();
+  
+  try {
+    const agentName = options.agent;
+    const keys = await loadKeys(agentName);
+    if (!keys) {
+      spinner.fail('Agent not found');
+      return;
+    }
+    
+    const username = address.includes('@') ? address.split('@')[0] : address;
+    
+    const response = await axios.get(
+      `${keys.relay}/v1/intents/${username}`,
+      { timeout: 10000 }
+    );
+    
+    const intents = response.data.intents || {};
+    
+    spinner.succeed(`Retrieved intents for ${address}`);
+    
+    console.log(chalk.bold(`\nAllowed Intents:`));
+    
+    const entries = Object.entries(intents);
+    if (entries.length === 0) {
+      console.log(chalk.gray('No intents found'));
+    } else {
+      for (const [name, info] of entries) {
+        const intentInfo = info as { privileged: boolean; description: string };
+        const access = intentInfo.privileged 
+          ? chalk.yellow('privileged ⚠️') 
+          : chalk.green('open');
+        console.log(chalk.cyan(`\n  ${name} [${access}]`));
+        console.log(`    ${intentInfo.description}`);
+        if (intentInfo.privileged) {
+          console.log(chalk.gray(`    You need permission to use this intent`));
+        }
+      }
+    }
+    
+    console.log();
+    
+  } catch (err: any) {
+    if (err.response?.status === 404) {
+      spinner.fail('User not found');
+    } else {
+      spinner.fail(`Failed: ${err.message}`);
+    }
+    process.exit(1);
+  }
+}
+
+function getUsername(keys: AgentData): string {
+  return keys.name?.toLowerCase().replace(/\s+/g, '-') || '';
+}

@@ -1,14 +1,15 @@
 /**
- * Jest Configuration for coneko-cli
+ * Jest Configuration for coneko-cli (TypeScript)
  */
 
 module.exports = {
   testEnvironment: 'node',
-  testMatch: ['**/tests/**/*.test.js'],
-  testPathIgnorePatterns: ['/node_modules/'],
+  testMatch: ['**/tests/**/*.test.ts'],
+  testPathIgnorePatterns: ['/node_modules/', '/dist/'],
   collectCoverageFrom: [
-    'src/**/*.js',
-    '!src/**/*.test.js'
+    'src/**/*.ts',
+    '!src/**/*.test.ts',
+    '!src/types/**'
   ],
   coverageThreshold: {
     global: {
@@ -22,11 +23,15 @@ module.exports = {
   clearMocks: true,
   restoreMocks: false,
   testTimeout: 10000,
-  setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
+  setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
+  transform: {
+    '^.+\\.ts$': 'ts-jest'
+  },
   transformIgnorePatterns: [
     'node_modules/(?!(uuid)/)'
   ],
   moduleNameMapper: {
-    '^uuid$': '<rootDir>/tests/__mocks__/uuid.js'
-  }
+    '^uuid$': '<rootDir>/tests/__mocks__/uuid.ts'
+  },
+  moduleFileExtensions: ['ts', 'js', 'json']
 };
