@@ -1,15 +1,22 @@
-const fs = require('fs-extra');
-const path = require('path');
-const os = require('os');
+/**
+ * Configuration and filesystem utilities for coneko-cli
+ */
+
+import fs from 'fs-extra';
+import path from 'path';
+import os from 'os';
+import { AgentPaths, AgentConfig, AgentData } from '../types/index';
+
+export type { AgentData, AgentConfig, AgentPaths };
 
 const CONEKO_BASE_DIR = path.join(os.homedir(), '.coneko');
 
 /**
  * Get per-agent coneko directory path
- * @param {string} agentName - Agent name (optional, uses default if not provided)
- * @returns {string} Path to agent's coneko directory
+ * @param agentName - Agent name (optional, uses default if not provided)
+ * @returns Path to agent's coneko directory
  */
-function getAgentDir(agentName) {
+export function getAgentDir(agentName?: string): string {
   if (!agentName) {
     // Try to get from environment or use 'default'
     agentName = process.env.CONEKO_AGENT || 'default';
@@ -21,10 +28,10 @@ function getAgentDir(agentName) {
 
 /**
  * Get paths for agent files
- * @param {string} agentName - Agent name
- * @returns {Object} Paths object
+ * @param agentName - Agent name
+ * @returns Paths object
  */
-function getAgentPaths(agentName) {
+export function getAgentPaths(agentName?: string): AgentPaths {
   const agentDir = getAgentDir(agentName);
   return {
     baseDir: CONEKO_BASE_DIR,
@@ -41,9 +48,9 @@ function getAgentPaths(agentName) {
 
 /**
  * Ensure all agent directories exist
- * @param {string} agentName - Agent name
+ * @param agentName - Agent name
  */
-async function ensureAgentDirs(agentName) {
+export async function ensureAgentDirs(agentName?: string): Promise<AgentPaths> {
   const paths = getAgentPaths(agentName);
   await fs.ensureDir(paths.agentDir);
   await fs.ensureDir(paths.polledDir);
@@ -53,10 +60,10 @@ async function ensureAgentDirs(agentName) {
 
 /**
  * Load agent keys
- * @param {string} agentName - Agent name
- * @returns {Object|null} Keys data or null if not found
+ * @param agentName - Agent name
+ * @returns Keys data or null if not found
  */
-async function loadKeys(agentName) {
+export async function loadKeys(agentName?: string): Promise<AgentData | null> {
   const paths = getAgentPaths(agentName);
   if (await fs.pathExists(paths.keysFile)) {
     return fs.readJson(paths.keysFile);
@@ -66,23 +73,23 @@ async function loadKeys(agentName) {
 
 /**
  * Load agent config
- * @param {string} agentName - Agent name
- * @returns {Object} Config data
+ * @param agentName - Agent name
+ * @returns Config data
  */
-async function loadConfig(agentName) {
+export async function loadConfig(agentName?: string): Promise<AgentConfig> {
   const paths = getAgentPaths(agentName);
   if (await fs.pathExists(paths.configFile)) {
     return fs.readJson(paths.configFile);
   }
-  return { relay: 'https://api.coneko.ai' };
+  return { relay: 'https://api.coneko.ai', lastPoll: null, discoverable: false };
 }
 
 /**
  * Save agent config
- * @param {string} agentName - Agent name
- * @param {Object} config - Config data
+ * @param agentName - Agent name
+ * @param config - Config data
  */
-async function saveConfig(agentName, config) {
+export async function saveConfig(agentName: string | undefined, config: AgentConfig): Promise<void> {
   const paths = getAgentPaths(agentName);
   await fs.ensureDir(paths.agentDir);
   await fs.writeJson(paths.configFile, config, { spaces: 2 });
@@ -90,9 +97,9 @@ async function saveConfig(agentName, config) {
 
 /**
  * List all agent directories
- * @returns {string[]} Array of agent names
+ * @returns Array of agent names
  */
-async function listAgents() {
+export async function listAgents(): Promise<string[]> {
   if (!await fs.pathExists(CONEKO_BASE_DIR)) {
     return [];
   }
@@ -102,13 +109,4 @@ async function listAgents() {
     .map(e => e.name);
 }
 
-module.exports = {
-  CONEKO_BASE_DIR,
-  getAgentDir,
-  getAgentPaths,
-  ensureAgentDirs,
-  loadKeys,
-  loadConfig,
-  saveConfig,
-  listAgents
-};
+export { CONEKO_BASE_DIR };

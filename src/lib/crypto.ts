@@ -1,8 +1,15 @@
-const { ed25519, x25519 } = require('@noble/curves/ed25519');
-const { sha256 } = require('@noble/hashes/sha256');
-const { randomBytes } = require('crypto');
+/**
+ * Cryptographic utilities for coneko-cli
+ */
 
-function generateKeyPair() {
+import { ed25519, x25519 } from '@noble/curves/ed25519';
+import { sha256 } from '@noble/hashes/sha256';
+import { AgentKeys, EncryptedPayload, MessageContent } from '../types';
+
+/**
+ * Generate a new key pair for signing and encryption
+ */
+export function generateKeyPair(): AgentKeys {
   // Ed25519 for signing
   const signingPrivate = ed25519.utils.randomPrivateKey();
   const signingPublic = ed25519.getPublicKey(signingPrivate);
@@ -19,20 +26,29 @@ function generateKeyPair() {
   };
 }
 
-function getFingerprint(publicKeyB64) {
+/**
+ * Get fingerprint from public key
+ */
+export function getFingerprint(publicKeyB64: string): string {
   const keyBytes = Buffer.from(publicKeyB64, 'base64');
   const hash = sha256(keyBytes);
   return Buffer.from(hash.slice(0, 16)).toString('base64url').replace(/=+$/, '');
 }
 
-function signMessage(message, signingPrivateB64) {
+/**
+ * Sign a message with Ed25519
+ */
+export function signMessage(message: MessageContent, signingPrivateB64: string): string {
   const privateKey = Buffer.from(signingPrivateB64, 'base64');
   const canonical = JSON.stringify(message, Object.keys(message).sort());
   const signature = ed25519.sign(Buffer.from(canonical), privateKey);
   return Buffer.from(signature).toString('base64');
 }
 
-function verifySignature(message, signatureB64, publicKeyB64) {
+/**
+ * Verify a message signature
+ */
+export function verifySignature(message: MessageContent, signatureB64: string, publicKeyB64: string): boolean {
   try {
     const publicKey = Buffer.from(publicKeyB64, 'base64');
     const signature = Buffer.from(signatureB64, 'base64');
@@ -43,7 +59,10 @@ function verifySignature(message, signatureB64, publicKeyB64) {
   }
 }
 
-function encryptMessage(plaintext, recipientPublicB64) {
+/**
+ * Encrypt a message using X25519 ECDH
+ */
+export function encryptMessage(plaintext: string, recipientPublicB64: string): EncryptedPayload {
   const ephemeralPrivate = x25519.utils.randomPrivateKey();
   const ephemeralPublic = x25519.getPublicKey(ephemeralPrivate);
   const recipientPublic = Buffer.from(recipientPublicB64, 'base64');
@@ -68,7 +87,10 @@ function encryptMessage(plaintext, recipientPublicB64) {
   };
 }
 
-function decryptMessage(encrypted, recipientPrivateB64) {
+/**
+ * Decrypt a message using X25519 ECDH
+ */
+export function decryptMessage(encrypted: EncryptedPayload, recipientPrivateB64: string): string {
   const ephemeralPublic = Buffer.from(encrypted.ephemeralPublic, 'base64');
   const recipientPrivate = Buffer.from(recipientPrivateB64, 'base64');
   const ciphertext = Buffer.from(encrypted.ciphertext, 'base64');
@@ -88,12 +110,3 @@ function decryptMessage(encrypted, recipientPrivateB64) {
   
   return plaintext.toString();
 }
-
-module.exports = {
-  generateKeyPair,
-  getFingerprint,
-  signMessage,
-  verifySignature,
-  encryptMessage,
-  decryptMessage
-};

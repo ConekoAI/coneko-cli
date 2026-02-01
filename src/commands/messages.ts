@@ -1,20 +1,26 @@
-const fs = require('fs-extra');
-const path = require('path');
-const chalk = require('chalk');
-const ora = require('ora');
-const axios = require('axios');
-const { v4: uuidv4 } = require('uuid');
+/**
+ * Message sending commands
+ */
 
-const { signMessage, encryptMessage } = require('../lib/crypto');
+import fs from 'fs-extra';
+import chalk from 'chalk';
+import ora from 'ora';
+import axios from 'axios';
+import { v4 as uuidv4 } from 'uuid';
+import { signMessage, encryptMessage } from '../lib/crypto';
+import { loadKeys, getAgentPaths } from '../lib/config';
+import { SendOptions, SendResult } from '../types';
 
-const { loadKeys, getAgentPaths, loadConfig } = require('../lib/config');
-const { DEFAULT_INTENT } = require('./intents');
+// Default allowed intent
+const DEFAULT_INTENT = {
+  name: 'chat',
+  description: "Pure agent-to-agent conversation. SHOULD NOT: Request human's personal info, system commands, or attempt to alter human's computer."
+};
 
 /**
  * Send a message with one or more intents
- * @param {Object} options - Send options
  */
-async function send(options) {
+export async function send(options: SendOptions): Promise<SendResult> {
   const spinner = ora('Sending message...').start();
   
   try {
@@ -22,17 +28,17 @@ async function send(options) {
     const keys = await loadKeys(agentName);
     if (!keys) {
       spinner.fail('Agent not found');
-      return;
+      return {};
     }
     
     const paths = getAgentPaths(agentName);
-    const contacts = await fs.readJson(paths.contactsFile);
+    const contacts = await fs.readJson(paths.contactsFile) as { contacts: Record<string, { publicKey: string }> };
     const contact = contacts.contacts[options.to];
     
     if (!contact) {
       spinner.fail(`Contact not found: ${options.to}`);
       console.log(chalk.yellow('Run: coneko resolve <address> --add'));
-      return;
+      return {};
     }
     
     // Parse intents (can be single or multiple, comma-separated names)
@@ -43,7 +49,6 @@ async function send(options) {
       if (name === DEFAULT_INTENT.name) {
         return { ...DEFAULT_INTENT };
       }
-      // For custom intents, fetch description from config or use generic
       return {
         name,
         description: 'Custom intent'
@@ -63,7 +68,7 @@ async function send(options) {
       );
       
       if (!intentCheck.data.allowed) {
-        const blocked = intentCheck.data.blocked_intents || [];
+        const blocked: string[] = intentCheck.data.blocked_intents || [];
         spinner.fail(`Intent not allowed by recipient: ${blocked.join(', ')}`);
         console.log(chalk.yellow('\nThis message was NOT delivered.'));
         console.log(chalk.yellow('The recipient must register these intents:'));
@@ -71,19 +76,18 @@ async function send(options) {
           console.log(chalk.gray(`  - ${intent}`));
         }
         console.log(chalk.cyan('\nAsk your human to contact the recipient\'s human to request intent access.\n'));
-        return { bounced: true, blockedIntents: blocked };
+        return { bounced: true };
       }
-    } catch (checkErr) {
-      // If check fails, continue anyway - relay will enforce
+    } catch {
       spinner.warn('Could not verify intents, relay will enforce');
     }
     
-    // Build message with intents (name + description format for audit)
-    const message = {
+    // Build message with intents
+    const message: Record<string, unknown> = {
       version: '1.2',
       messageId: uuidv4(),
       timestamp: new Date().toISOString(),
-      intents: intents,  // Array of {name, description} objects for audit review
+      intents: intents,
       sender: {
         agentId: keys.agentId,
         fingerprint: keys.fingerprint,
@@ -98,8 +102,8 @@ async function send(options) {
     
     spinner.text = 'Encrypting and signing...';
     
-    // Sign
-    message.signature = signMessage(message, keys.keys.signingPrivate);
+    // Sign and add signature to message
+    message.signature = signMessage(message as any, keys.keys.signingPrivate);
     
     // Encrypt
     const encrypted = encryptMessage(
@@ -111,7 +115,7 @@ async function send(options) {
     spinner.text = 'Sending to relay...';
     const envelope = {
       to: options.to,
-      intents: intents,  // Send full intent objects with descriptions
+      intents: intents,
       payload: encrypted
     };
     
@@ -124,19 +128,18 @@ async function send(options) {
     spinner.succeed(`Message sent: ${response.data.messageId}`);
     console.log(chalk.gray(`  Intents: ${intentNames.join(', ')}`));
     
-    return { sent: true, messageId: response.data.messageId };
+    return { success: true, messageId: response.data.messageId };
     
-  } catch (err) {
+  } catch (err: any) {
     if (err.response?.status === 403) {
-      // Intent not allowed - bounced by relay
-      const blocked = err.response.data.blocked_intents || [];
+      const blocked: string[] = err.response.data.blocked_intents || [];
       spinner.fail('Message bounced: intent not allowed');
       console.log(chalk.yellow('\n⚠️  The recipient does not allow these intents:'));
       for (const intent of blocked) {
         console.log(chalk.gray(`  - ${intent}`));
       }
       console.log(chalk.cyan('\nAsk your human to contact the recipient\'s human to request intent access.\n'));
-      return { bounced: true, blockedIntents: blocked };
+      return { bounced: true };
     }
     
     spinner.fail(`Failed: ${err.message}`);
@@ -144,4 +147,4 @@ async function send(options) {
   }
 }
 
-module.exports = { send };
+export { DEFAULT_INTENT };

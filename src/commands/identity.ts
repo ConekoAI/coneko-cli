@@ -1,11 +1,18 @@
-const fs = require('fs-extra');
-const path = require('path');
-const chalk = require('chalk');
-const ora = require('ora');
-const { generateKeyPair, getFingerprint } = require('../lib/crypto');
-const { ensureAgentDirs, loadKeys, getAgentPaths } = require('../lib/config');
+/**
+ * Identity management commands
+ */
 
-async function init(options) {
+import fs from 'fs-extra';
+import chalk from 'chalk';
+import ora from 'ora';
+import { generateKeyPair, getFingerprint } from '../lib/crypto';
+import { ensureAgentDirs, loadKeys, getAgentPaths, listAgents } from '../lib/config';
+import { InitOptions, CommandOptions } from '../types';
+
+/**
+ * Initialize a new agent identity
+ */
+export async function init(options: InitOptions): Promise<void> {
   const spinner = ora('Initializing agent...').start();
   
   try {
@@ -16,9 +23,11 @@ async function init(options) {
     if (await fs.pathExists(paths.keysFile)) {
       spinner.info('Agent already initialized');
       const existing = await loadKeys(agentName);
-      console.log(chalk.yellow(`\nExisting agent: ${existing.name}`));
-      console.log(chalk.yellow(`Fingerprint: ${existing.fingerprint}`));
-      console.log(chalk.gray(`Location: ${paths.agentDir}`));
+      if (existing) {
+        console.log(chalk.yellow(`\nExisting agent: ${existing.name}`));
+        console.log(chalk.yellow(`Fingerprint: ${existing.fingerprint}`));
+        console.log(chalk.gray(`Location: ${paths.agentDir}`));
+      }
       return;
     }
     
@@ -41,7 +50,7 @@ async function init(options) {
     await fs.writeJson(paths.configFile, { 
       relay: options.relay,
       lastPoll: null,
-      discoverable: false  // Default: not discoverable
+      discoverable: false
     }, { spaces: 2 });
     
     spinner.succeed(`Agent "${options.name}" initialized`);
@@ -56,13 +65,16 @@ Agent ID: ${agentId}`));
     console.log(chalk.gray(`  read/           - Processed archive`));
     console.log(chalk.red(`\n⚠️  Keep keys.json secure — it contains your private keys!`));
     
-  } catch (err) {
+  } catch (err: any) {
     spinner.fail(`Failed to initialize: ${err.message}`);
     process.exit(1);
   }
 }
 
-async function whoami(options) {
+/**
+ * Show current agent identity
+ */
+export async function whoami(options: CommandOptions): Promise<void> {
   try {
     const agentName = options.agent;
     const paths = getAgentPaths(agentName);
@@ -78,6 +90,11 @@ async function whoami(options) {
     }
     
     const keys = await loadKeys(agentName);
+    if (!keys) {
+      console.log(chalk.yellow('Could not load agent keys'));
+      return;
+    }
+    
     console.log(chalk.bold('\n🐱 Agent Identity'));
     console.log(`  Name: ${chalk.cyan(keys.name)}`);
     console.log(`  ID: ${keys.agentId}`);
@@ -87,16 +104,17 @@ async function whoami(options) {
     console.log(chalk.gray(`\nLocation: ${paths.agentDir}`));
     
     // Show other agents if any
-    const { listAgents } = require('../lib/config');
     const allAgents = await listAgents();
     if (allAgents.length > 1) {
-      console.log(chalk.gray(`\nOther agents: ${allAgents.filter(a => a !== (agentName || keys.name.toLowerCase().replace(/\s+/g, '-'))).join(', ')}`));
+      const currentName = agentName || keys.name.toLowerCase().replace(/\s+/g, '-');
+      const otherAgents = allAgents.filter(a => a !== currentName);
+      if (otherAgents.length > 0) {
+        console.log(chalk.gray(`\nOther agents: ${otherAgents.join(', ')}`));
+      }
     }
     
-  } catch (err) {
+  } catch (err: any) {
     console.error(chalk.red(`Error: ${err.message}`));
     process.exit(1);
   }
 }
-
-module.exports = { init, whoami };

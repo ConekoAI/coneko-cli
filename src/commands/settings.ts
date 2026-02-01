@@ -1,16 +1,18 @@
-const fs = require('fs-extra');
-const path = require('path');
-const chalk = require('chalk');
-const ora = require('ora');
-const axios = require('axios');
-const { loadKeys, getAgentPaths } = require('../lib/config');
+/**
+ * Settings and discoverability commands
+ */
+
+import fs from 'fs-extra';
+import chalk from 'chalk';
+import ora from 'ora';
+import axios from 'axios';
+import { loadKeys, getAgentPaths } from '../lib/config';
+import { CommandOptions, SearchOptions } from '../types';
 
 /**
  * Set account discoverability
- * @param {boolean} discoverable - Whether account should be discoverable
- * @param {Object} options - Options
  */
-async function setDiscoverable(discoverable, options) {
+export async function setDiscoverable(discoverable: boolean, options: CommandOptions): Promise<void> {
   const spinner = ora(`Setting discoverability to ${discoverable}...`).start();
   
   try {
@@ -21,7 +23,7 @@ async function setDiscoverable(discoverable, options) {
       return;
     }
     
-    const response = await axios.post(
+    await axios.post(
       `${keys.relay}/v1/registry/discoverable`,
       { discoverable },
       {
@@ -34,7 +36,7 @@ async function setDiscoverable(discoverable, options) {
     
     // Update local config
     const paths = getAgentPaths(agentName);
-    const config = await fs.readJson(paths.configFile).catch(() => ({}));
+    const config = await fs.readJson(paths.configFile).catch(() => ({})) as Record<string, unknown>;
     config.discoverable = discoverable;
     await fs.writeJson(paths.configFile, config, { spaces: 2 });
     
@@ -45,7 +47,7 @@ async function setDiscoverable(discoverable, options) {
         : '  Your account will not appear in search results'
     ));
     
-  } catch (err) {
+  } catch (err: any) {
     spinner.fail(`Failed: ${err.message}`);
     if (err.response?.data?.error) {
       console.error(chalk.red(`  ${err.response.data.error}`));
@@ -56,9 +58,8 @@ async function setDiscoverable(discoverable, options) {
 
 /**
  * Get current discoverability status
- * @param {Object} options - Options
  */
-async function getDiscoverable(options) {
+export async function getDiscoverable(options: CommandOptions): Promise<void> {
   try {
     const agentName = options.agent;
     const keys = await loadKeys(agentName);
@@ -68,7 +69,7 @@ async function getDiscoverable(options) {
     }
     
     const paths = getAgentPaths(agentName);
-    const config = await fs.readJson(paths.configFile).catch(() => ({}));
+    const config = await fs.readJson(paths.configFile).catch(() => ({})) as { discoverable?: boolean };
     
     console.log(chalk.bold('\n🐱 Account Discoverability'));
     console.log(`  Agent: ${keys.name}`);
@@ -87,7 +88,7 @@ async function getDiscoverable(options) {
     console.log(chalk.gray(`    coneko discoverable --agent ${keys.name}`));
     console.log(chalk.gray(`    coneko undiscoverable --agent ${keys.name}`));
     
-  } catch (err) {
+  } catch (err: any) {
     console.error(chalk.red(`Error: ${err.message}`));
     process.exit(1);
   }
@@ -95,10 +96,8 @@ async function getDiscoverable(options) {
 
 /**
  * Search discoverable accounts
- * @param {string} query - Search query
- * @param {Object} options - Options
  */
-async function searchAccounts(query, options) {
+export async function searchAccounts(query: string, options: SearchOptions): Promise<void> {
   const spinner = ora(`Searching for "${query}"...`).start();
   
   try {
@@ -141,7 +140,7 @@ async function searchAccounts(query, options) {
     
     console.log(chalk.gray('  To add: coneko friend-request <address>'));
     
-  } catch (err) {
+  } catch (err: any) {
     spinner.fail(`Search failed: ${err.message}`);
     if (err.response?.status === 400) {
       console.error(chalk.yellow('  Query must be at least 2 characters'));
@@ -152,9 +151,8 @@ async function searchAccounts(query, options) {
 
 /**
  * Get service metrics
- * @param {Object} options - Options
  */
-async function getMetrics(options) {
+export async function getMetrics(options: CommandOptions & { relay?: string }): Promise<void> {
   const spinner = ora('Fetching service metrics...').start();
   
   try {
@@ -180,15 +178,8 @@ async function getMetrics(options) {
     console.log();
     console.log(chalk.gray(`  Relay: ${relay}`));
     
-  } catch (err) {
+  } catch (err: any) {
     spinner.fail(`Failed: ${err.message}`);
     process.exit(1);
   }
 }
-
-module.exports = {
-  setDiscoverable,
-  getDiscoverable,
-  searchAccounts,
-  getMetrics
-};

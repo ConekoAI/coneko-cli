@@ -1,19 +1,25 @@
-const fs = require('fs-extra');
-const path = require('path');
-const chalk = require('chalk');
-const ora = require('ora');
-const axios = require('axios');
+/**
+ * Registry commands for DNS-style addressing
+ */
 
-const { signMessage } = require('../lib/crypto');
-const { loadKeys, getAgentPaths } = require('../lib/config');
+import fs from 'fs-extra';
+import chalk from 'chalk';
+import ora from 'ora';
+import axios from 'axios';
+import { signMessage } from '../lib/crypto';
+import { loadKeys, getAgentPaths } from '../lib/config';
+import { CommandOptions, RegisterOptions, ResolveOptions } from '../types';
 
-// Default chat intent - simple name + description format (not URI)
-const DEFAULT_INTENT = {
+// Default chat intent
+export const DEFAULT_INTENT = {
   name: 'chat',
   description: "Pure agent-to-agent conversation. SHOULD NOT request human's personal info, system commands, or attempt to alter human's computer."
 };
 
-async function register(address, options) {
+/**
+ * Register username@domain on relay
+ */
+export async function register(address: string, options: RegisterOptions): Promise<void> {
   const spinner = ora(`Registering ${address}...`).start();
   
   try {
@@ -71,7 +77,7 @@ async function register(address, options) {
     console.log(chalk.cyan(`  ✓ Auto-registered "${DEFAULT_INTENT.name}" intent for receiving messages`));
     
     // Save to local config
-    const config = await fs.readJson(paths.configFile).catch(() => ({}));
+    const config = await fs.readJson(paths.configFile).catch(() => ({})) as Record<string, unknown>;
     config.registered = {
       address: response.data.address,
       discoverable: response.data.discoverable,
@@ -80,7 +86,7 @@ async function register(address, options) {
     
     // Auto-register default "chat" intent locally for receiving messages
     if (!config.intents) config.intents = {};
-    config.intents[DEFAULT_INTENT.name] = {
+    (config.intents as Record<string, unknown>)[DEFAULT_INTENT.name] = {
       description: DEFAULT_INTENT.description,
       allowed: true,
       isDefault: true,
@@ -89,7 +95,7 @@ async function register(address, options) {
     await fs.writeJson(paths.configFile, config, { spaces: 2 });
     
     // Save to local contacts for self-reference
-    const contacts = await fs.readJson(paths.contactsFile).catch(() => ({ contacts: {} }));
+    const contacts = await fs.readJson(paths.contactsFile).catch(() => ({ contacts: {} })) as { contacts: Record<string, unknown> };
     contacts.contacts[fingerprint] = {
       agentId: keys.agentId,
       name: `${username}@${domain}`,
@@ -100,13 +106,16 @@ async function register(address, options) {
     };
     await fs.writeJson(paths.contactsFile, contacts, { spaces: 2 });
     
-  } catch (err) {
+  } catch (err: any) {
     spinner.fail(`Failed: ${err.response?.data?.error || err.message}`);
     process.exit(1);
   }
 }
 
-async function resolve(address, options) {
+/**
+ * Resolve username@domain to fingerprint
+ */
+export async function resolve(address: string, options: ResolveOptions): Promise<void> {
   const spinner = ora(`Resolving ${address}...`).start();
   
   try {
@@ -138,7 +147,7 @@ async function resolve(address, options) {
     // Auto-add to contacts if requested
     if (options.add && keys) {
       const paths = getAgentPaths(agentName);
-      const contacts = await fs.readJson(paths.contactsFile).catch(() => ({ contacts: {} }));
+      const contacts = await fs.readJson(paths.contactsFile).catch(() => ({ contacts: {} })) as { contacts: Record<string, unknown> };
       
       contacts.contacts[response.data.fingerprint] = {
         agentId: `agent_${response.data.fingerprint.substring(0, 12)}`,
@@ -153,7 +162,7 @@ async function resolve(address, options) {
       console.log(chalk.green('\n  ✓ Added to contacts'));
     }
     
-  } catch (err) {
+  } catch (err: any) {
     if (err.response?.status === 404) {
       spinner.fail(`User not found: ${address}`);
     } else {
@@ -163,7 +172,10 @@ async function resolve(address, options) {
   }
 }
 
-async function whois(fingerprint, options) {
+/**
+ * Reverse lookup: find addresses by fingerprint
+ */
+export async function whois(fingerprint: string, options: CommandOptions & { relay?: string }): Promise<void> {
   const spinner = ora(`Looking up ${fingerprint}...`).start();
   
   try {
@@ -186,10 +198,8 @@ async function whois(fingerprint, options) {
       console.log(`  ${reg.address} @ ${reg.relay_url}`);
     }
     
-  } catch (err) {
+  } catch (err: any) {
     spinner.fail(`Failed: ${err.response?.data?.error || err.message}`);
     process.exit(1);
   }
 }
-
-module.exports = { register, resolve, whois, DEFAULT_INTENT };
