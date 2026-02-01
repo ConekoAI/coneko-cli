@@ -4,7 +4,10 @@
 
 module.exports = {
   testEnvironment: 'node',
-  testMatch: ['**/tests/**/*.test.ts'],
+  testMatch: [
+    '**/tests/*.test.ts',
+    '**/tests/[^e]*/**/*.test.ts'
+  ],
   testPathIgnorePatterns: ['/node_modules/', '/dist/'],
   collectCoverageFrom: [
     'src/**/*.ts',

@@ -9,7 +9,7 @@ import { AgentPaths, AgentConfig, AgentData } from '../types/index';
 
 export type { AgentData, AgentConfig, AgentPaths };
 
-const CONEKO_BASE_DIR = path.join(os.homedir(), '.coneko');
+const CONEKO_BASE_DIR = process.env.CONEKO_CONFIG_DIR || path.join(os.homedir(), '.coneko');
 
 /**
  * Get per-agent coneko directory path
