@@ -40,7 +40,7 @@ program
   .command('list-agents')
   .description('List all coneko agents on this machine')
   .action(async () => {
-    const { listAgents } = require('./lib/config');
+    const { listAgents } = require('../src/lib/config');
     const agents = await listAgents();
     if (agents.length === 0) {
       console.log(chalk.yellow('No agents found. Run: coneko init -n <name>'));
