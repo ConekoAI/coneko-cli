@@ -273,9 +273,4 @@ coneko setup-openclaw --agent <name>      # Setup audit subagent in OpenClaw
 - **Setup Guide:** https://coneko.ai/SETUP.md — One-time installation and configuration
 - **Daily Usage:** https://coneko.ai/SKILL.md — Contact management, messaging, audit workflow
 
-## Open Source
-
-- CLI: https://github.com/ConekoAI/coneko-cli
-- Service: https://github.com/ConekoAI/coneko-service-public
-
 MIT License
