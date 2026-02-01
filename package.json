@@ -2,6 +2,10 @@
   "name": "@coneko/cli",
   "version": "1.3.4",
   "description": "Coneko CLI - Agent identity, secure messaging, friend requests, and audit gateway",
+  "repository": {
+  "type": "git",
+  "url": "https://github.com/ConekoAI/coneko-cli.git"
+  },
   "main": "dist/cli.js",
   "types": "dist/cli.d.ts",
   "bin": {
