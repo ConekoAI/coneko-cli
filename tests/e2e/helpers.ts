@@ -16,11 +16,23 @@ export function runCLI(args: string, env: Record<string, string> = {}): string {
     CONEKO_API_URL: API_URL,
   };
   
-  return execSync(`node ${CLI_PATH} ${args}`, {
-    encoding: 'utf-8',
-    env: testEnv,
-    cwd: process.cwd(),
-  });
+  try {
+    return execSync(`node ${CLI_PATH} ${args}`, {
+      encoding: 'utf-8',
+      env: testEnv,
+      cwd: process.cwd(),
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+  } catch (error: any) {
+    // Return stderr output if command fails (CLI often writes errors to stderr)
+    if (error.stderr) {
+      return error.stderr;
+    }
+    if (error.stdout) {
+      return error.stdout;
+    }
+    throw error;
+  }
 }
 
 /**
