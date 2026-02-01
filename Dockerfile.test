@@ -1,0 +1,22 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install curl and wget for healthchecks
+RUN apk add --no-cache curl wget
+
+# Copy package files
+COPY package*.json ./
+RUN npm ci
+
+# Copy source
+COPY . .
+
+# Build the project
+RUN npm run build
+
+# Create directory for test results
+RUN mkdir -p test-results
+
+# Default to running e2e tests
+CMD ["npm", "run", "test:e2e"]

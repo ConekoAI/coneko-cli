@@ -17,6 +17,9 @@
     "build": "tsc",
     "dev": "ts-node src/cli.ts",
     "test": "jest",
+    "test:e2e": "jest --config jest.e2e.config.js",
+    "test:e2e:watch": "jest --config jest.e2e.config.js --watch",
+    "test:all": "npm test && npm run test:e2e",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
