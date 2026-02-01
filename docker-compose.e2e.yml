@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: coneko-e2e-db
+    environment:
+      POSTGRES_USER: coneko
+      POSTGRES_PASSWORD: testpass
+      POSTGRES_DB: coneko_test
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U coneko"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  service:
+    build:
+      context: ../coneko-service  # Assumes coneko-service is cloned alongside coneko-cli
+      dockerfile: Dockerfile.test
+    container_name: coneko-e2e-service
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://coneko:testpass@db:5432/coneko_test
+      NODE_ENV: test
+      PORT: 3000
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/health"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
+  cli-tests:
+    build:
+      context: ./coneko-cli
+      dockerfile: Dockerfile.test
+    container_name: coneko-e2e-cli
+    environment:
+      CONEKO_API_URL: http://service:3000
+      CONEKO_TEST_MODE: e2e
+    depends_on:
+      service:
+        condition: service_healthy
+    volumes:
+      - ./test-results:/app/test-results
+      - ./coneko-cli/tests/e2e:/app/tests/e2e:ro
+    command: npm run test:e2e
+
+volumes:
+  postgres_data:
