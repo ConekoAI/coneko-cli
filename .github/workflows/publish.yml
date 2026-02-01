@@ -50,7 +50,7 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/coneko-service
           path: coneko-service
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
 
       - name: Create docker-compose.e2e.yml
         run: |
