@@ -18,5 +18,5 @@ RUN npm run build
 # Create directory for test results
 RUN mkdir -p test-results
 
-# Default to running e2e tests
-CMD ["npm", "run", "test:e2e"]
+# Default shell (tests are run via command override)
+CMD ["sh"]
