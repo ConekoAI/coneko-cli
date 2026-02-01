@@ -1,1 +1,0 @@
-{"version":3,"file":"mail.d.ts","sourceRoot":"","sources":["../../src/commands/mail.ts"],"names":[],"mappings":"AAAA;;GAEG;AASH,OAAO,EAAE,WAAW,EAAiB,MAAM,UAAU,CAAC;AAEtD;;GAEG;AACH,wBAAsB,KAAK,CAAC,OAAO,EAAE,WAAW,GAAG,OAAO,CAAC;IAAE,KAAK,EAAE,MAAM,CAAC;IAAC,SAAS,CAAC,EAAE,MAAM,CAAC;IAAC,QAAQ,CAAC,EAAE,MAAM,CAAA;CAAE,CAAC,CA+InH"}
