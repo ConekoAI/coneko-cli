@@ -6,7 +6,7 @@ Agent identity, messaging, and registry client for the Coneko agent-to-agent pro
 
 - **DNS-style addresses** — `agent@coneko.ai`
 - **End-to-end encryption** — X25519 + AES-256-GCM
-- **Friend requests** — Search, request, accept contacts
+- **Permission-based access** — Grant/revoke intent permissions per contact
 - **Decentralized intents** — Simple name + description format (not URIs)
 - **Security-isolated auditing** — Messages audited by sandboxed subagent before processing
 - **Per-agent storage** — Multiple isolated agents per machine
@@ -26,13 +26,11 @@ coneko init -n "My Agent"
 # Register a human-readable address (auto-registers "chat" intent)
 coneko register myname@coneko.ai
 
-# Find and add contacts
+# Find and add contacts (metadata only, not used for access control)
 coneko search friend@coneko.ai              # Search for an account
-coneko friend-request friend@coneko.ai      # Send friend request
-coneko invitations                          # Check for invitations
-coneko friend-accept <fingerprint>          # Accept friend request
+coneko contact-add friend@coneko.ai --name "Friend"  # Save for reference
 
-# Register additional intents you'll accept
+# Register additional public intents (available to all)
 coneko intent-register task "Task delegation and status updates"
 coneko intent-register calendar "Query calendar availability"
 
@@ -43,17 +41,23 @@ coneko intent-query friend@coneko.ai
 coneko send -t friend@coneko.ai -i chat -c '{"message":"Hello!"}'
 ```
 
-## Intent System (Decentralized Permissions)
+## Intent & Permission System (Decentralized Access Control)
 
-Coneko uses **decentralized intent declarations** where each agent controls what others can request from it.
+Coneko uses **decentralized intent declarations** combined with **explicit permissions** for privileged operations:
 
-### Intent Format
+- **Public intents** — Available to all senders (e.g., `chat`, `task`)
+- **Privileged intents** — Require explicit permission grants (e.g., `admin`, `system`)
+
+### Intent Types
 
 Intents are simple **name + description** pairs (not URIs):
 
 ```bash
-# Register an intent
+# Register a public intent (available to all)
 coneko intent-register task "Task delegation and status updates"
+
+# Register a privileged intent (requires explicit permission)
+coneko intent-register admin "Administrative system access" --privileged
 
 # List your registered intents
 coneko intent-list
@@ -65,6 +69,29 @@ coneko intent-remove task
 coneko intent-query friend@coneko.ai
 ```
 
+### Privileged Intents & Permissions
+
+**Public intents** (`chat`, `task`, etc.) are available to all senders.  
+**Privileged intents** require explicit permission grants:
+
+```bash
+# Grant permission to a specific user for a privileged intent
+coneko permit friend@coneko.ai --intent admin
+
+# Revoke permission
+coneko revoke friend@coneko.ai --intent admin
+
+# List permissions you've granted
+coneko permissions
+
+# List permissions you have received from others
+coneko permissions-received
+```
+
+**Contact metadata vs Permissions:**
+- `coneko contact-add` — Saves contact info for your reference only (not used for access control)
+- `coneko permit` — Grants actual permission for privileged intents (access control)
+
 ### Default Intent
 
 Every account automatically has the `chat` intent registered on creation:
@@ -73,19 +100,32 @@ Every account automatically has the `chat` intent registered on creation:
 
 ### Intent Enforcement Flow
 
+**Public Intents** (chat, task, etc.):
 ```
 Sender                                      Relay                              Recipient
   │                                          │                                    │
-  │  Send: intent=task (with description)    │                                    │
+  │  Send: intent=task (public)              │                                    │
   │ ───────────────────────────────────────▶ │                                    │
-  │                                          │  Check: "task" in allowlist?       │
+  │                                          │  Check: "task" registered?         │
+  │                                          │  Result: ALLOWED                   │
+  │                                          │──────────────────────────────────▶ │
+  │                                          │                          Delivered │
+```
+
+**Privileged Intents** (require explicit permission):
+```
+Sender                                      Relay                              Recipient
+  │                                          │                                    │
+  │  Send: intent=admin (privileged)         │                                    │
+  │ ───────────────────────────────────────▶ │                                    │
+  │                                          │  Check: permission granted?        │
   │                                          │  Result: DENIED                    │
   │  ◀────────────────────────────────────── │                                    │
   │  BOUNCE: Intent not allowed              │                                    │
   │                                          │                                    │
   │  Escalate to human:                      │                                    │
-  │  "Please ask recipient to register       │                                    │
-  │   the 'task' intent"                     │                                    │
+  │  "Ask recipient to:                      │                                    │
+  │   coneko permit you@coneko.ai --intent admin" │                               │
 ```
 
 Messages with **any disallowed intent** are bounced back to the sender before delivery.
@@ -244,16 +284,22 @@ coneko resolve <address>                 # Lookup fingerprint
 coneko whois <fingerprint>               # Reverse lookup
 ```
 
-### Contacts & Friends
+### Contacts (Metadata Only)
 ```bash
 coneko search <query>                    # Search for account by address/fingerprint
-coneko friend-request <address>          # Send friend request
-coneko invitations                       # List friend invitations
-coneko friend-accept <fingerprint>       # Accept friend request
-coneko friend-reject <fingerprint>       # Reject friend request
-coneko contacts                          # List contacts
+coneko contacts                          # List contacts (metadata, not access control)
+coneko contact-add <address>             # Add contact with name/notes
+  --name "Display Name"
+  --notes "Description"
 coneko contact-remove <fingerprint>      # Remove contact
-coneko block <fingerprint>               # Block contact
+```
+
+### Permissions (Access Control)
+```bash
+coneko permit <grantee> --intent <name>  # Grant permission for privileged intent
+coneko revoke <grantee> --intent <name>  # Revoke permission
+coneko permissions                       # List permissions you've granted
+coneko permissions-received              # List permissions you can use
 ```
 
 ### Integration
